@@ -1,10 +1,9 @@
 // This macro inserts a leading clip with some clicks and
 // pads the rest of tracks with an empty space, then renders all clips per track
 // Usage: 
-// 1. Select a range 
-// 2. then select the clip containing the click track 
-// 3. execute the macro
-
+//   1. Select a range with the mouse.
+//   2. then select the clip containing the click track. 
+//   3. execute the macro.
 
 function pasteClip(clip, start, end)
 {
@@ -12,51 +11,13 @@ function pasteClip(clip, start, end)
     Tracktion.deselectAll();
     Tracktion.addObjectsToSelection(clip);
     Tracktion.copy();
-    Tracktion.insertSpaceIntoEdit (start, end - start);
+    Tracktion.insertSpaceIntoEdit (start, end - start); // for all tracks
     Tracktion.paste();
     Tracktion.setPosition ('cursor', start);
     Tracktion.moveStartOfSelectedClipsToCursor();
     var trclips = Tracktion.getClipsFromTracks (Tracktion.getTrackFromSelectedObject());
     var seclips = Tracktion.getSelectedEditElements ('clip');
     Tracktion.log("After pasting, there are " + seclips.length + " selected clips out of " + trclips.length);
-}
-
-function padOtherTracksThan(trackName, start)
-{
-    var tracks = Tracktion.getEditElements ('track');
-    var name = null;
-    for(var t = 0; t < tracks.length; ++t ) {
-        //Tracktion.log("Comparing Track[" + t + "] name  (" + name + ") con track name (" + trackName + ")");
-        name = Tracktion.getName(tracks[t]);
-        if (name !== trackName) {
-            Tracktion.deselectAll();
-            Tracktion.addObjectsToSelection(tracks[t]);
-            Tracktion.setPosition ('cursor', start);
-            Tracktion.insertClip ('wave');
-        }
-    }
-}
-
-function logTrack(track, i, clips)
-{
-    name = Tracktion.getName(track);
-    Tracktion.log("Track[" + i + "] = " + name + " has " + clips.length + " clips");
-}
-
-function mergeAllClips()
-{
-    var tracks = Tracktion.getEditElements ('track');
-    Tracktion.deselectAll();
-    Tracktion.log("found " + tracks.length + " tracks");
-    for(var t = 0; t < tracks.length; ++t ) {
-        var clips = Tracktion.getClipsFromTracks (tracks[t]);
-        logTrack(tracks[t], t, clips);
-        for(var c = 0; c < clips.length; ++c ) {
-            Tracktion.addObjectsToSelection(clips[c]);
-        } 
-    }
-    // Even though we have selected all clips, merge processing is per track
-    Tracktion.mergeSelectedClips (true);
 }
 
 function splitMarkedRegion(old_method)
@@ -77,7 +38,7 @@ function splitMarkedRegion(old_method)
     return [start, end];
 }
 
-function duplicateLeadingClickTrackBar()
+function duplicateSelectedRegion()
 {
     var clips   = Tracktion.getSelectedEditElements ('clip');
     if (clips.length == 0) {
@@ -97,7 +58,6 @@ function duplicateLeadingClickTrackBar()
         index = 1;
     }
     pasteClip(clips[index], start, end);
-    padOtherTracksThan(clickTrackName, start);
-    mergeAllClips();
 }
-duplicateLeadingClickTrackBar();
+
+duplicateSelectedRegion();
