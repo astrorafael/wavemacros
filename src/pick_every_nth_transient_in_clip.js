@@ -1,5 +1,5 @@
 // ---------------------------------------------------
-// Decimates a click track pulses every 'beatsPerBar'
+// Decimates a click track pulses every 'decimationFactor'
 // User must select the clip to be decimated.
 // Only one clip must be selected.
 // --------------------------------------------------
@@ -36,7 +36,7 @@ function decimateClips(track, clips, N, offset, inverted) {
 }   
 
 
-function decimateClipTransientsEvery(N, offset)
+function pickTransientsInClipEvery(N, offset)
 {
     var clips = Tracktion.getSelectedEditElements ('clip');
     var track = Tracktion.getTrackFromSelectedObject();
@@ -59,5 +59,5 @@ function decimateClipTransientsEvery(N, offset)
     Tracktion.setName (clips[0], name);   // final clip name
 }
 
-decimateClipTransientsEvery(decimationFactor, offset, inverted);
+pickTransientsInClipEvery(decimationFactor, offset, inverted);
 
