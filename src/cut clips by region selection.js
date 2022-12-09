@@ -1,8 +1,8 @@
-// This macro cuts a clib given a region selection
+// This macro cuts a clip given a region selection
 // Usage: 
-// 1. Select a range 
-// 2. then select the clip containing the click track 
-// 3. execute the macro
+// 1. Select a range with the mouse.
+// 2. Select the clip containing the click track 
+// 3. Execute the macro
 
 function splitMarkedRegion(old_method)
 {

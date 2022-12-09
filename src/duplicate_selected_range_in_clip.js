@@ -1,9 +1,10 @@
-// This macro inserts a leading clip with some clicks and
-// pads the rest of tracks with an empty space, then renders all clips per track
+// This macro inserts a leading clip with some clicks 
+// and displaces the remianing tracks leaving an empty space in between, 
+// then renders all clips per track.
 // Usage: 
-//   1. Select a range with the mouse.
-//   2. then select the clip containing the click track. 
-//   3. execute the macro.
+// 1. Select a range with the mouse.
+// 2. Select the clip containing the click track.
+// 3. Execute the macro.
 
 function pasteClip(clip, start, end)
 {
