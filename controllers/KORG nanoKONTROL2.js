@@ -29,7 +29,7 @@
 // Controller version
 // ==================
 
-const VERSION = "0.1.2";
+const VERSION = "0.1.3";
 
 // ===================
 // DEBUGGING UTILITIES
@@ -80,14 +80,6 @@ function ChannelStripController(channel, parent)
 
     this.debugMsg("Creating channel strip [" + channel + "]");
 
-    /*
-    this.onFaderBankChanged = function(track) {
-        var bank = this.parent.getCurrentBank();
-        var N    = this.parent.numberOfFaderChannels;
-        this.track = track;
-        this.debugMsg("onFaderBankChanged(" + track + ") managing track [" + bank + "*" + N + "+" + this.channel + "] => " + track);
-    }
-    */
     // soloLit         = 1,    Track is explicitly soloed. 
     // soloFlashing    = 2,    Track is implicitly soloed. 
     // soloIsolate     = 4,    Track is explicitly solo isolated. 
@@ -111,25 +103,23 @@ function ChannelStripController(channel, parent)
         var channel = msg[1] & 0x07;
         var value   = msg[2];
         var handled = false;
-        var bank = this.parent.getCurrentBank();
-        var N    = this.parent.numberOfFaderChannels;
         if((element == BUTTON) && (channel == this.channel) && (value != 0)) {
             if (button == SOLO_BUTTON) {
-                this.debugMsg("Pressed <SOLO> <0x" + SOLO_BUTTON.toString(16) + "> [" + bank + "*" + N + "+" + channel + "]");
+                this.debugMsg("Pressed <SOLO> <0x" + SOLO_BUTTON.toString(16) + "> [" + channel + "]");
                 this.solo = !this.solo;
                 this.parent.lightUpButton(SOLO_BUTTON + channel, this.solo);
                 toggleSolo (this.channel);         // Call Waveform API
                 selectPluginInTrack(this.channel); // Call Waveform API
                 handled = true;
             } else if (button == MUTE_BUTTON) {
-                this.debugMsg("Pressed <MUTE> <0x" + MUTE_BUTTON.toString(16) + "> [" + bank + "*" + N + "+" + channel + "]");
+                this.debugMsg("Pressed <MUTE> <0x" + MUTE_BUTTON.toString(16) + "> [" + channel + "]");
                 this.mute = !this.mute;
                 this.parent.lightUpButton(MUTE_BUTTON + channel, this.mute);
                 toggleMute (this.channel);         // Call Waveform API
                 selectPluginInTrack(this.channel); // Call Waveform API
                 handled = true;
             } else if (button == ARM_REC_BUTTON) {
-                this.debugMsg("Pressed <ARM REC> <0x" + ARM_REC_BUTTON.toString(16) + "> [" + bank + "*" + N + "+" + channel + "]");
+                this.debugMsg("Pressed <ARM REC> <0x" + ARM_REC_BUTTON.toString(16) + "> [" + channel + "]");
                 this.arm = !this.arm;
                 this.parent.lightUpButton(ARM_REC_BUTTON + channel, this.arm);
                 toggleRecEnable (this.channel, false); // Call Waveform API
@@ -137,13 +127,13 @@ function ChannelStripController(channel, parent)
                 handled = true;  
             }
         } else if ((element == SLIDER) && ((msg[0] & 0x07) == this.channel)) {
-            this.debugMsg("Moving <Slider> [" + bank + "*" + N + "+" + this.channel + "] => " + value);
+            this.debugMsg("Moving <Slider> [" + this.channel + "] => " + value);
             setFader (this.channel, value / 127, false); // Call Waveform API
             selectPluginInTrack(this.channel);           // Call Waveform API
             handled = true;
          } else if ((element == KNOB) && (channel == this.channel)) {
             var increment = value & 0x40 ? -(value & 0x3F) : (value & 0x3F);
-            this.debugMsg("Turning <Knob> [" + bank + "*" + N + "+" + channel + "] => " + increment);
+            this.debugMsg("Turning <Knob> [" + channel + "] => " + increment);
             setPanPot (this.channel, increment/63, true); // Call Waveform API
             selectPluginInTrack(this.channel);            // Call Waveform API
             handled = true;
@@ -168,7 +158,7 @@ function FaderBankController(parent, N)
     this.N       = N;           // Number of fader channels
     this.loop    = false;
     this.bank    = 0;
-    this.missing = 0;
+    this.missingTracks = false; // to complete a whole Bank, when changing banks
 
     // Helper method
     this.debugMsg = debugFactory(DEBUG_LEVEL, DEBUG_FADER_BANK);
@@ -184,10 +174,10 @@ function FaderBankController(parent, N)
         return this.bank;
     } 
 
-    this.onFaderBankChanged = function(lastTrack) {
-        var tope = this.bank * this.N;
-        this.debugMsg("onFaderBankChanged(): lastTrack = " + lastTrack + ", bank #" + this.bank + ", tope =" + tope);
-        this.missing = (this.bank * this.N) - lastTrack;
+    this.onFaderBankChanged = function(highestTrack) {
+        var limit = this.bank * this.N;
+        this.debugMsg("onFaderBankChanged(): highestTrack = " + highestTrack + ", bank #" + this.bank + ", limit = " + limit);
+        this.missingTracks = ((this.bank * this.N) - highestTrack) > 0;
     }
 
     this.handleMessage = function (msg) {
@@ -204,7 +194,7 @@ function FaderBankController(parent, N)
             handled = true;
         } else if ((element == BUTTON) && (button == TRACK_RIGHT_BUTTON) && (value == 0x7f)) {
             this.debugMsg("Pressed <TRACK RIGHT> <0x" + TRACK_RIGHT_BUTTON.toString(16) + ">");
-            if (this.missing == 0) {
+            if (! this.missingTracks) {
                 this.bank += 1;
                 this.debugMsg("changeFaderBanks(" + this.N + ")");
                 changeFaderBanks (this.N); // call Tracktion API
@@ -423,7 +413,7 @@ function KORGnanoKONTROL2() {
     this.onSoloMuteChanged = function(channel, muteAndSoloLightState, isBright) {
         var bank = this.getCurrentBank();
         var N = this.numberOfFaderChannels;
-        this.debugMsg("onSoloMuteChanged [" + bank + "*" + N + "+" + channel + "] => 0x" + muteAndSoloLightState.toString(16));
+        this.debugMsg("onSoloMuteChanged [" + channel + "] => 0x" + muteAndSoloLightState.toString(16));
         this.channelStrip[channel].onSoloMuteChanged(muteAndSoloLightState, isBright);
     }
 
@@ -431,14 +421,14 @@ function KORGnanoKONTROL2() {
     this.onTrackRecordEnabled = function(channel, isEnabled) {
         var bank = this.getCurrentBank();
         var N = this.numberOfFaderChannels;
-        this.debugMsg("onTrackRecordEnabled [" + bank + "*" + N + "+" + channel + "] => "+ isEnabled);
+        this.debugMsg("onTrackRecordEnabled [" + channel + "] => "+ isEnabled);
         this.channelStrip[channel].onTrackRecordEnabled(isEnabled);  
     }
 
     // called by Tracktion's Waveform
-    this.onFaderBankChanged = function(lastTrack) {
-        this.debugMsg("onFaderBankChanged(" + lastTrack + ")");
-        this.bankController.onFaderBankChanged(lastTrack);
+    this.onFaderBankChanged = function(highestTrack) {
+        this.debugMsg("onFaderBankChanged(" + highestTrack + ")");
+        this.bankController.onFaderBankChanged(highestTrack);
     }
 
     // called by Tracktion's Waveform
