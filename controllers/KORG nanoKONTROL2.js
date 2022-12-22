@@ -29,7 +29,7 @@
 // Controller version
 // ==================
 
-const VERSION = "0.1.4";
+const VERSION = "1.0.0";
 
 // ===================
 // DEBUGGING UTILITIES
@@ -42,7 +42,7 @@ const DEBUG_FADER_BANK = 0x08; // Log Fader Bank & Loop Controller messages
 const DEBUG_MARKERS    = 0x10; // Log Markers Controller messages
 const DEBUG_TRANSPORT  = 0x20  // Log Transport Controller messages
 
-const DEBUG_LEVEL      = 0xFE; // Current debug level
+const DEBUG_LEVEL      = 0x00; // Current debug level
 
 function debugFactory(level, mask) {
   return function (msg) { if (level & mask) logMsg(msg); };
@@ -157,9 +157,6 @@ function FaderBankController(parent, N)
     this.parent  = parent;
     this.N       = N;           // Number of fader channels
     this.loop    = false;
-    this.bank    = 0;
-    this.highMark = false; // manage high limit when changing fader banks
-    this.lowMark  = false; // manage low  limit when changing fader banks
 
     // Helper method
     this.debugMsg = debugFactory(DEBUG_LEVEL, DEBUG_FADER_BANK);
@@ -172,10 +169,12 @@ function FaderBankController(parent, N)
     }
 
     this.onFaderBankChanged = function(newStartChannelNumber) {
-        var limit = this.bank * this.N;
-        this.debugMsg("onFaderBankChanged(): highestTrack = " + newStartChannelNumber + ", bank #" + this.bank + ", limit = " + limit);
-        this.highMark = ((this.bank * this.N) - newStartChannelNumber) > 0;
-        this.lowMark  = (newStartChannelNumber == 0);
+        var modulus = newStartChannelNumber % this.N;
+        this.debugMsg("onFaderBankChanged(" + newStartChannelNumber + "): modulus = " + modulus);
+        if (modulus != 0) {
+            this.debugMsg("onFaderBankChanged(" + newStartChannelNumber + "): lowering start track by " + -modulus);
+            changeFaderBanks (-modulus);
+        }
     }
 
     this.handleMessage = function (msg) {
@@ -185,16 +184,14 @@ function FaderBankController(parent, N)
         var handled = false;
         if ((element == BUTTON) && (button == TRACK_LEFT_BUTTON) && (value == 0x7f)) {
             this.debugMsg("Pressed <TRACK LEFT> <0x" + TRACK_LEFT_BUTTON.toString(16) + ">");
-            if (! this.lowMark) {
-                this.bank -= 1;
+            if (getFaderBankOffset() > 0) {
                 this.debugMsg("changeFaderBanks(" + -this.N + ")");
                 changeFaderBanks (-this.N); // call Tracktion API
             }
             handled = true;
         } else if ((element == BUTTON) && (button == TRACK_RIGHT_BUTTON) && (value == 0x7f)) {
             this.debugMsg("Pressed <TRACK RIGHT> <0x" + TRACK_RIGHT_BUTTON.toString(16) + ">");
-            if (! this.highMark) {
-                this.bank += 1;
+            if ((getFaderBankOffset() % this.N) == 0) {
                 this.debugMsg("changeFaderBanks(" + this.N + ")");
                 changeFaderBanks (this.N); // call Tracktion API
             }
@@ -289,27 +286,27 @@ function TransportControl(parent)
         var value   = msg[2];
         var handled = false;
         if ((element == BUTTON) && (button == REWIND_BUTTON)) {
-            this.debugMsg("Pressed <REW> <0x" + REWIND_BUTTON.toString(16) + "]");
+            this.debugMsg("Pressed <REW> <0x" + REWIND_BUTTON.toString(16) + ">");
             // gotoStart(); 
             rewind (value == 0x7f);
             this.parent.lightUpButton(REWIND_BUTTON, value == 0x7f);
             handled = true;
         } else if ((element == BUTTON) && (button == FAST_FORWARD_BUTTON)) {
-            this.debugMsg("Pressed <FF> <0x" + FAST_FORWARD_BUTTON.toString(16) + "]");
+            this.debugMsg("Pressed <FF> <0x" + FAST_FORWARD_BUTTON.toString(16) + ">");
             // gotoEnd();
             fastForward (value == 0x7f);
             this.parent.lightUpButton(FAST_FORWARD_BUTTON, value == 0x7f);
             handled = true;
         } else if ((element == BUTTON) && (button == STOP_BUTTON) && (value == 0x7f)) {
-            this.debugMsg("Pressed <STOP> <0x" + STOP_BUTTON.toString(16) + "]");
+            this.debugMsg("Pressed <STOP> <0x" + STOP_BUTTON.toString(16) + ">");
             stop(); // Call Tracktion API
             handled = true;
         } else if ((element == BUTTON) && (button == PLAY_BUTTON) && (value == 0x7f)) {
-            this.debugMsg("Pressed <PLAY> <0x" + PLAY_BUTTON.toString(16) + "]");
+            this.debugMsg("Pressed <PLAY> <0x" + PLAY_BUTTON.toString(16) + ">");
             play();         // Call Tracktion API
             handled = true;
         } else if ((element == BUTTON) && (button == RECORD_BUTTON) && (value == 0x7f)) {
-            this.debugMsg("Pressed <RECORD> <0x" + RECORD_BUTTON.toString(16) + "]");
+            this.debugMsg("Pressed <RECORD> <0x" + RECORD_BUTTON.toString(16) + ">");
             record();
             handled = true;
         }
@@ -390,6 +387,7 @@ function KORGnanoKONTROL2() {
     // initialise the hardware again
     this.initialiseDevice = function() {  
         this.debugMsg("Initializing " + this.deviceDescription);
+        updateDeviceState(); // not sure what it does ....
     }
 
     // called by Tracktion's Waveform at shutdown
