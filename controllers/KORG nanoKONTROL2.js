@@ -1,5 +1,5 @@
 /*
-    Controller: Korg nanoKONTROL2
+    Controller: KORG nanoKONTROL2
     
     License: MIT
 
@@ -29,7 +29,7 @@
 // Controller version
 // ==================
 
-const VERSION = "0.1.3";
+const VERSION = "0.1.4";
 
 // ===================
 // DEBUGGING UTILITIES
@@ -158,7 +158,8 @@ function FaderBankController(parent, N)
     this.N       = N;           // Number of fader channels
     this.loop    = false;
     this.bank    = 0;
-    this.missingTracks = false; // to complete a whole Bank, when changing banks
+    this.highMark = false; // manage high limit when changing fader banks
+    this.lowMark  = false; // manage low  limit when changing fader banks
 
     // Helper method
     this.debugMsg = debugFactory(DEBUG_LEVEL, DEBUG_FADER_BANK);
@@ -170,14 +171,11 @@ function FaderBankController(parent, N)
         this.parent.lightUpButton(CYCLE_BUTTON, isLoopOn);
     }
 
-    this.getCurrentBank = function () {
-        return this.bank;
-    } 
-
-    this.onFaderBankChanged = function(highestTrack) {
+    this.onFaderBankChanged = function(newStartChannelNumber) {
         var limit = this.bank * this.N;
-        this.debugMsg("onFaderBankChanged(): highestTrack = " + highestTrack + ", bank #" + this.bank + ", limit = " + limit);
-        this.missingTracks = ((this.bank * this.N) - highestTrack) > 0;
+        this.debugMsg("onFaderBankChanged(): highestTrack = " + newStartChannelNumber + ", bank #" + this.bank + ", limit = " + limit);
+        this.highMark = ((this.bank * this.N) - newStartChannelNumber) > 0;
+        this.lowMark  = (newStartChannelNumber == 0);
     }
 
     this.handleMessage = function (msg) {
@@ -187,14 +185,15 @@ function FaderBankController(parent, N)
         var handled = false;
         if ((element == BUTTON) && (button == TRACK_LEFT_BUTTON) && (value == 0x7f)) {
             this.debugMsg("Pressed <TRACK LEFT> <0x" + TRACK_LEFT_BUTTON.toString(16) + ">");
-            this.bank -= 1;
-            this.bank = Math.max(this.bank, 0); 
-            this.debugMsg("changeFaderBanks(" + -this.N + ")");
-            changeFaderBanks (-this.N); // call Tracktion API
+            if (! this.lowMark) {
+                this.bank -= 1;
+                this.debugMsg("changeFaderBanks(" + -this.N + ")");
+                changeFaderBanks (-this.N); // call Tracktion API
+            }
             handled = true;
         } else if ((element == BUTTON) && (button == TRACK_RIGHT_BUTTON) && (value == 0x7f)) {
             this.debugMsg("Pressed <TRACK RIGHT> <0x" + TRACK_RIGHT_BUTTON.toString(16) + ">");
-            if (! this.missingTracks) {
+            if (! this.highMark) {
                 this.bank += 1;
                 this.debugMsg("changeFaderBanks(" + this.N + ")");
                 changeFaderBanks (this.N); // call Tracktion API
@@ -276,13 +275,11 @@ function TransportControl(parent)
 
     // tells the device that playback has stopped or started, and it should turn its lights on accordingly.
     this.onPlayStateChanged = function(isPlaying) {  
-        this.debugMsg("onPlayStateChanged() => " + isPlaying);
         this.parent.lightUpButton(STOP_BUTTON, ! isPlaying);
         this.parent.lightUpButton(PLAY_BUTTON,  isPlaying);
     }
 
     this.onRecordStateChanged = function(isRecording) {
-        this.debugMsg("onRecordStateChanged() => " + isRecording);  
         this.parent.lightUpButton(RECORD_BUTTON, isRecording);
     }
 
@@ -327,7 +324,7 @@ function TransportControl(parent)
 
 function KORGnanoKONTROL2() {
     // Tracktion's Waveform variables: these must be filled out so the session knows your controller layout
-    this.deviceDescription               = "Korg nanoKONTROL 2";        // device name
+    this.deviceDescription               = "KORG nanoKONTROL 2";        // device name
     this.needsMidiChannel                = true;                        // send midi controller to daw
     this.needsMidiBackChannel            = true;                        // send midi daw to controller
     this.midiChannelName                 = "nanoKONTROL2 SLIDER/KNOB";  // MIDI channel name
@@ -366,13 +363,9 @@ function KORGnanoKONTROL2() {
     // Helper method: Lights up a given button
     this.lightUpButton = function(buttonNum, on) {
         var value = on ? 0x7f : 0x00;
-        this.debugMIDI("MIDI OUT ==> [0x" + BUTTON.toString(16) + ", 0x" + buttonNum.toString(16) + ", 0x" + value.toString(16) + "]");
+        var string = "[0x" + BUTTON.toString(16) + ", 0x" + buttonNum.toString(16) + ", 0x" + value.toString(16) + "]";
+        this.debugMIDI("MIDI OUT ==> " + string);
         sendMidiToDevice ([BUTTON, buttonNum, value]);
-    }
-
-    // helper method
-    this.getCurrentBank = function () {
-        return this.bankController.getCurrentBank();
     }
 
     // Called by Tracktion's Waveform once at startup. 
@@ -405,39 +398,38 @@ function KORGnanoKONTROL2() {
     }
 
     // called by Tracktion's Waveform
-    this.onLoopChanged = function(isLoopOn) {  
+    this.onLoopChanged = function(isLoopOn) { 
+        this.debugMsg("onLoopChanged(" + isLoopOn + ")"); 
         this.bankController.onLoopChanged(isLoopOn);  
     }
 
     // called by Tracktion's Waveform
     this.onSoloMuteChanged = function(channel, muteAndSoloLightState, isBright) {
-        var bank = this.getCurrentBank();
-        var N = this.numberOfFaderChannels;
-        this.debugMsg("onSoloMuteChanged [" + channel + "] => 0x" + muteAndSoloLightState.toString(16));
+        this.debugMsg("onSoloMuteChanged(" + channel + "," + muteAndSoloLightState + "," + isBright +")");
         this.channelStrip[channel].onSoloMuteChanged(muteAndSoloLightState, isBright);
     }
 
     // called by Tracktion's Waveform
     this.onTrackRecordEnabled = function(channel, isEnabled) {
-        var bank = this.getCurrentBank();
-        var N = this.numberOfFaderChannels;
-        this.debugMsg("onTrackRecordEnabled [" + channel + "] => "+ isEnabled);
+        this.debugMsg("onTrackRecordEnabled(" + channel + "," + isEnabled +")");
         this.channelStrip[channel].onTrackRecordEnabled(isEnabled);  
     }
 
     // called by Tracktion's Waveform
-    this.onFaderBankChanged = function(highestTrack) {
-        this.debugMsg("onFaderBankChanged(" + highestTrack + ")");
-        this.bankController.onFaderBankChanged(highestTrack);
+    this.onFaderBankChanged = function(newStartChannelNumber) {
+        this.debugMsg("onFaderBankChanged(" + newStartChannelNumber + ")");
+        this.bankController.onFaderBankChanged(newStartChannelNumber);
     }
 
     // called by Tracktion's Waveform
-    this.onPlayStateChanged = function(isPlaying) {    
+    this.onPlayStateChanged = function(isPlaying) { 
+        this.debugMsg("onPlayStateChanged(" + isPlaying + ")");   
         this.transport.onPlayStateChanged(isPlaying);
     }
 
     // called by Tracktion's Waveform
     this.onRecordStateChanged = function(isRecording) {
+        this.debugMsg("onRecordStateChanged(" + isRecording + ")");  
         this.transport.onRecordStateChanged(isRecording);
     }
 
@@ -446,13 +438,19 @@ function KORGnanoKONTROL2() {
     //  translate this and call methods in the session accordingly to
     // trigger whatever action the user is trying to do.
     this.onMidiReceivedFromDevice = function(msg) {
-        this.debugMIDI("MIDI IN  <== [0x" + msg[0].toString(16) + ", 0x" + msg[1].toString(16) + ", 0x" + msg[2].toString(16) + "]");
+        var string = "MIDI IN  <== [0x" + msg[0].toString(16) + ", 0x" + msg[1].toString(16) + ", 0x" + msg[2].toString(16) + "]"
+        this.debugMIDI(string);
         var handled = false;
         for(var i=0; i < this.children.length; i++) {
             handled = this.children[i].handleMessage(msg);
             if (handled) {
                 break;
             }
+        }
+        if(handled) { 
+            this.debugMIDI(string + " handled"); 
+        } else { 
+            this.debugMIDI(string + " ignored");
         }
     }
 }
