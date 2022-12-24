@@ -42,7 +42,7 @@ const DEBUG_FADER_BANK = 0x08; // Log Fader Bank & Loop Controller messages
 const DEBUG_MARKERS    = 0x10; // Log Markers Controller messages
 const DEBUG_TRANSPORT  = 0x20  // Log Transport Controller messages
 
-const DEBUG_LEVEL      = 0x04; // Current debug level
+const DEBUG_LEVEL      = 0x00; // Current debug level
 
 function debugFactory(level, mask) {
   return function (msg) { if (level & mask) logMsg(msg); };
