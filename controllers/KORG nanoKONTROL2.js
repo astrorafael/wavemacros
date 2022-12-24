@@ -29,7 +29,7 @@
 // Controller version
 // ==================
 
-const VERSION = "1.1.0";
+const VERSION = "1.1.1";
 
 // ===================
 // DEBUGGING UTILITIES
@@ -69,13 +69,12 @@ function ChannelStripController(channel, parent)
     const SOLO_BUTTON    = 0x08;
     const MUTE_BUTTON    = 0x10;
 
-    this.arm           = false;
-    this.solo          = false;
-    this.mute          = false;
-    this.soloFlashing  = false;
-    this.soloIsolEnab = false;
-    this.parent        = parent;
-    this.channel       = channel; // Always from 0 to 7
+    this.arm         = false;
+    this.solo        = false;
+    this.mute        = false;
+    this.soloIsolate = false;
+    this.parent      = parent;
+    this.channel     = channel; // Always from 0 to 7
 
     // Helper method
     this.debugMsg = debugFactory(DEBUG_LEVEL, DEBUG_CHAN_STRIP);
@@ -90,15 +89,14 @@ function ChannelStripController(channel, parent)
     this.onSoloMuteChanged = function (muteAndSoloLightState, isBright) {
         this.mute = ((muteAndSoloLightState & (8 | 16))    != 0 );
         this.solo = ((muteAndSoloLightState & (1 | 2)) != 0 );
-        this.soloIsolEnab = ((muteAndSoloLightState & 4)  != 0);
+        this.soloIsolate = ((muteAndSoloLightState & 4)  != 0);
         this.parent.lightUpButton(SOLO_BUTTON + this.channel, this.solo);
         this.parent.lightUpButton(MUTE_BUTTON + this.channel, this.mute);
     }
 
-    this.soloFlash = function() {
-        if (this.soloIsolEnab && ! this.solo) {
-            this.soloFlashing = !this.soloFlashing;
-            this.parent.lightUpButton(SOLO_BUTTON + this.channel, this.soloFlashing);
+    this.soloFlash = function(soloFlashing) {
+        if (this.soloIsolate && ! this.solo) {
+            this.parent.lightUpButton(SOLO_BUTTON + this.channel, soloFlashing);
         } else {
             this.parent.lightUpButton(SOLO_BUTTON + this.channel, this.solo);
         }
@@ -363,6 +361,7 @@ function KORGnanoKONTROL2() {
     this.bankController                  = null;
     this.markersController               = null;
     this.transport                       = null;
+    this.soloFlashing                    = false;
    
    
     // Helper method
@@ -417,8 +416,9 @@ function KORGnanoKONTROL2() {
     // called by Tracktion's Waveform
     this.onTimer = function(name) {
         this.debugMsg("onTimer(" + name + ")");
+        this.soloFlashing = !this.soloFlashing;
         for(var channel=0; channel<this.numberOfFaderChannels; channel++) {
-            this.channelStrip[channel].soloFlash();
+            this.channelStrip[channel].soloFlash(this.soloFlashing);
         }
     }
 
