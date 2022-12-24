@@ -29,7 +29,7 @@
 // Controller version
 // ==================
 
-const VERSION = "1.0.0";
+const VERSION = "1.1.0";
 
 // ===================
 // DEBUGGING UTILITIES
@@ -42,7 +42,7 @@ const DEBUG_FADER_BANK = 0x08; // Log Fader Bank & Loop Controller messages
 const DEBUG_MARKERS    = 0x10; // Log Markers Controller messages
 const DEBUG_TRANSPORT  = 0x20  // Log Transport Controller messages
 
-const DEBUG_LEVEL      = 0x00; // Current debug level
+const DEBUG_LEVEL      = 0x04; // Current debug level
 
 function debugFactory(level, mask) {
   return function (msg) { if (level & mask) logMsg(msg); };
@@ -69,11 +69,13 @@ function ChannelStripController(channel, parent)
     const SOLO_BUTTON    = 0x08;
     const MUTE_BUTTON    = 0x10;
 
-    this.solo    = false;
-    this.arm     = false;
-    this.mute    = false;
-    this.parent  = parent;
-    this.channel = channel; // Always from 0 to 7
+    this.arm           = false;
+    this.solo          = false;
+    this.mute          = false;
+    this.soloFlashing  = false;
+    this.soloIsolEnab = false;
+    this.parent        = parent;
+    this.channel       = channel; // Always from 0 to 7
 
     // Helper method
     this.debugMsg = debugFactory(DEBUG_LEVEL, DEBUG_CHAN_STRIP);
@@ -87,9 +89,19 @@ function ChannelStripController(channel, parent)
     // muteFlashing    = 16    Track is implicitly muted.
     this.onSoloMuteChanged = function (muteAndSoloLightState, isBright) {
         this.mute = ((muteAndSoloLightState & (8 | 16))    != 0 );
-        this.solo = ((muteAndSoloLightState & (1 | 2 | 4)) != 0 );
+        this.solo = ((muteAndSoloLightState & (1 | 2)) != 0 );
+        this.soloIsolEnab = ((muteAndSoloLightState & 4)  != 0);
         this.parent.lightUpButton(SOLO_BUTTON + this.channel, this.solo);
         this.parent.lightUpButton(MUTE_BUTTON + this.channel, this.mute);
+    }
+
+    this.soloFlash = function() {
+        if (this.soloIsolEnab && ! this.solo) {
+            this.soloFlashing = !this.soloFlashing;
+            this.parent.lightUpButton(SOLO_BUTTON + this.channel, this.soloFlashing);
+        } else {
+            this.parent.lightUpButton(SOLO_BUTTON + this.channel, this.solo);
+        }
     }
 
     this.onTrackRecordEnabled = function(isEnabled) { 
@@ -320,6 +332,9 @@ function TransportControl(parent)
 // =========================================================================================== //
 
 function KORGnanoKONTROL2() {
+
+    const FLASH_PERIOD                 = 500;                         // solo/mute button flicker in ms
+
     // Tracktion's Waveform variables: these must be filled out so the session knows your controller layout
     this.deviceDescription               = "KORG nanoKONTROL 2";        // device name
     this.needsMidiChannel                = true;                        // send midi controller to daw
@@ -379,7 +394,10 @@ function KORGnanoKONTROL2() {
             var obj = new ChannelStripController(i, this)
             this.children.push (obj);
             this.channelStrip.push(obj);
-        }   
+        } 
+        stopTimer ("flash");   // just in case there is one hanging around
+        startTimer ("flash", FLASH_PERIOD);
+  
     }
 
     // Called by Tracktion's Waveform at startup or any time the midi or osc ports change.
@@ -392,7 +410,16 @@ function KORGnanoKONTROL2() {
 
     // called by Tracktion's Waveform at shutdown
     this.shutDownDevice = function() { 
-        this.debugMsg("Shutting down " + this.deviceDescription);       
+        this.debugMsg("Shutting down " + this.deviceDescription); 
+        stopTimer ("flash");      
+    }
+
+    // called by Tracktion's Waveform
+    this.onTimer = function(name) {
+        this.debugMsg("onTimer(" + name + ")");
+        for(var channel=0; channel<this.numberOfFaderChannels; channel++) {
+            this.channelStrip[channel].soloFlash();
+        }
     }
 
     // called by Tracktion's Waveform
